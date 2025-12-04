@@ -8,14 +8,14 @@ import {
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN SUPABASE ---
-// ⚠️ PEGA AQUÍ TUS DATOS DE SUPABASE DEL PASO ANTERIOR
+// ⚠️ ASEGÚRATE DE QUE ESTAS CLAVES SEAN LAS TUYAS (YA ESTÁN PUESTAS SEGÚN TU CÓDIGO ANTERIOR)
 const supabaseUrl = 'https://wnmephaqeimbkxyhnudk.supabase.co'; 
 const supabaseKey = 'sb_publishable_I8-PavLHDmKc50hr6FXviA_uzGtUzt2';
 
 const supabase = createClient(supabaseUrl, supabaseKey);
-const appId = 'agency-os-default'; // Mantenemos esto por compatibilidad visual
+const appId = 'agency-os-default';
 
-// --- COMPONENTES UI (TUS MEJORAS VISUALES) ---
+// --- COMPONENTES UI ---
 
 const Badge = ({ children, color = 'gray', className = '', onClick }) => {
   const colors = {
@@ -111,15 +111,15 @@ export default function AgencyOS() {
 
   useEffect(() => {
     fetchData();
-    // Suscripción básica a cambios en tiempo real
     const channel = supabase.channel('realtime_updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, fetchData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, fetchData)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // --- LOGIC (ADAPTADA A SUPABASE) ---
+  // --- LOGIC ---
 
   const handleAddTask = async () => {
     if (!newTask.title) return;
@@ -129,14 +129,13 @@ export default function AgencyOS() {
        if (p) finalProjectName = p.name;
     }
     
-    // Insertar en Supabase
     await supabase.from('tasks').insert([{
       ...newTask, 
       projectName: finalProjectName, 
       createdAt: new Date().toISOString()
     }]);
     
-    fetchData(); // Refrescar manual por si acaso
+    fetchData();
     setTaskModalOpen(false);
   };
 
@@ -161,20 +160,17 @@ export default function AgencyOS() {
     fetchData();
   };
 
-  // --- CRITICAL FIX: CONVERT SUBTASK (ADAPTADO A SUPABASE) ---
   const handleConvertSubtaskToTask = async (subId) => {
     const subtask = editingTask.subtasks.find(s => s.id === subId);
     if (!subtask) return;
     
     if (!confirm(`¿Crear tarea nueva a partir de "${subtask.title}"?`)) return;
 
-    // 1. Remove subtask from current task
     const updatedSubtasks = editingTask.subtasks.filter(s => s.id !== subId);
-    setEditingTask({ ...editingTask, subtasks: updatedSubtasks }); // UI Update
+    setEditingTask({ ...editingTask, subtasks: updatedSubtasks });
     
     await supabase.from('tasks').update({ subtasks: updatedSubtasks }).eq('id', editingTask.id);
 
-    // 2. Create New Task in Supabase
     await supabase.from('tasks').insert([{
       title: subtask.title,
       status: 'todo',
@@ -211,7 +207,7 @@ export default function AgencyOS() {
     return projects.filter(p => p.lead === filterUser);
   };
 
-  // --- COMPONENTES INTERNOS DE VISTA ---
+  // --- COMPONENTES ---
 
   const TaskCard = ({ task }) => {
      const completedSub = task.subtasks?.filter(s => s.completed).length || 0;
@@ -253,8 +249,6 @@ export default function AgencyOS() {
      )
   };
 
-  // --- VISTAS ---
-
   const DashboardView = () => {
      const filteredP = getFilteredProjects();
      const filteredT = getFilteredTasks();
@@ -274,7 +268,6 @@ export default function AgencyOS() {
                  <div className="space-y-3">
                     {filteredP.map(p => {
                        const pt = tasks.filter(t=>t.projectId===p.id);
-                       // Real calculation
                        let items = 0, completed = 0;
                        pt.forEach(t=>{
                           items++; if(t.status==='done') completed++;
@@ -323,180 +316,4 @@ export default function AgencyOS() {
           </header>
 
           <div className="flex-1 overflow-auto p-8">
-             {currentView === 'dashboard' && <DashboardView />}
-             
-             {currentView === 'projects' && !selectedProjectId && (
-                <div className="space-y-4">
-                   <div className="flex justify-between"><h2 className="text-2xl font-bold">Proyectos</h2><button onClick={()=>setProjectModalOpen(true)} className="text-indigo-400 text-sm">+ Nuevo</button></div>
-                   <div className="grid grid-cols-3 gap-4">{getFilteredProjects().map(p=><Card key={p.id} className="cursor-pointer hover:border-indigo-500" onClick={()=>{setSelectedProjectId(p.id); setCurrentView('projects')}}><h3 className="font-bold">{p.name}</h3><p className="text-xs text-zinc-500">{p.clientName}</p></Card>)}</div>
-                </div>
-             )}
-             
-             {currentView === 'projects' && selectedProjectId && (
-                <div className="h-full flex flex-col">
-                   <div className="flex items-center gap-4 mb-4"><button onClick={()=>setSelectedProjectId(null)}><ArrowLeft/></button><h2 className="text-2xl font-bold">{projects.find(p=>p.id===selectedProjectId)?.name}</h2></div>
-                   <div className="flex-1 overflow-y-auto space-y-2">{getFilteredTasks().filter(t=>t.projectId===selectedProjectId && t.status!=='done').map(t=><TaskCard key={t.id} task={t}/>)}</div>
-                </div>
-             )}
-
-             {currentView === 'tasks' && (
-                <div className="grid grid-cols-2 gap-6 h-full">
-                   <div className="bg-zinc-900/20 border border-zinc-800 rounded-xl flex flex-col overflow-hidden">
-                      <div className="p-3 border-b border-zinc-800 font-bold text-zinc-300">Pendientes</div>
-                      <div className="flex-1 overflow-y-auto p-3">{getFilteredTasks().filter(t=>t.status!=='done').map(t=><TaskCard key={t.id} task={t}/>)}</div>
-                   </div>
-                   <div className="bg-zinc-900/20 border border-zinc-800 rounded-xl flex flex-col overflow-hidden">
-                      <div className="p-3 border-b border-zinc-800 font-bold text-zinc-500">Finalizadas</div>
-                      <div className="flex-1 overflow-y-auto p-3 opacity-50">{getFilteredTasks().filter(t=>t.status==='done').map(t=><TaskCard key={t.id} task={t}/>)}</div>
-                   </div>
-                </div>
-             )}
-
-             {currentView === 'clients' && !selectedClientId && (
-                <div className="space-y-4">
-                   <div className="flex justify-between"><h2 className="text-2xl font-bold">Clientes</h2><button onClick={()=>setClientModalOpen(true)} className="text-indigo-400 text-sm">+ Nuevo</button></div>
-                   <div className="grid grid-cols-3 gap-4">{clients.map(c=><Card key={c.id} className="cursor-pointer hover:border-emerald-500" onClick={()=>{setSelectedClientId(c.id); setCurrentView('clients')}}><h3 className="font-bold">{c.name}</h3><Badge color={c.status==='activo'?'green':'gray'}>{c.status}</Badge></Card>)}</div>
-                </div>
-             )}
-             
-             {currentView === 'team' && (
-                <div className="space-y-4">
-                   <div className="flex justify-between"><h2 className="text-2xl font-bold">Equipo</h2><button onClick={()=>setUserModalOpen(true)} className="text-indigo-400 text-sm">+ Nuevo</button></div>
-                   <div className="grid grid-cols-3 gap-4">{teamMembers.map(m=><Card key={m.id}><h3 className="font-bold">{m.name}</h3><p className="text-sm text-zinc-500">{m.role}</p></Card>)}</div>
-                </div>
-             )}
-          </div>
-       </main>
-
-       {/* MODAL: CREATE TASK */}
-       {isTaskModalOpen && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-             <Card className="w-full max-w-lg">
-                <h3 className="text-lg font-bold mb-4">Nueva Tarea</h3>
-                <Input placeholder="Título" value={newTask.title} onChange={e=>setNewTask({...newTask, title:e.target.value})} autoFocus/>
-                <Select options={[{value:'', label:'Sin Proyecto'}, ...projects.map(p=>({value:p.id, label:p.name}))]} onChange={e=>setNewTask({...newTask, projectId:e.target.value})}/>
-                <div className="flex justify-end gap-2 mt-4">
-                   <button onClick={()=>setTaskModalOpen(false)} className="text-zinc-400 hover:text-white px-4 py-2">Cancelar</button>
-                   <button onClick={handleAddTask} className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-500">Crear Tarea</button>
-                </div>
-             </Card>
-          </div>
-       )}
-
-       {/* MODAL: EDIT TASK (DETAIL) */}
-       {isDetailModalOpen && editingTask && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-             <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-4">
-                   <input className="bg-transparent text-xl font-bold text-white border-none focus:ring-0 w-full" value={editingTask.title} onChange={e=>setEditingTask({...editingTask, title:e.target.value})}/>
-                   <button onClick={()=>setDetailModalOpen(false)}><X className="text-zinc-500"/></button>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-6">
-                   <div>
-                      <label className="text-xs text-zinc-500 block mb-2">CHECKLIST</label>
-                      <div className="space-y-2">
-                         {editingTask.subtasks?.map(sub => (
-                            <div key={sub.id} className="flex items-center gap-2 bg-zinc-950 p-2 rounded border border-zinc-800 group">
-                               <div className={`w-4 h-4 border rounded cursor-pointer ${sub.completed ? 'bg-indigo-500 border-indigo-500' : 'border-zinc-600'}`} onClick={()=>{
-                                  const updated = editingTask.subtasks.map(s=>s.id===sub.id?{...s, completed:!s.completed}:s);
-                                  setEditingTask({...editingTask, subtasks:updated});
-                               }}></div>
-                               <input className="bg-transparent text-sm text-zinc-300 flex-1 border-none focus:ring-0" value={sub.title} onChange={e=>{
-                                  const updated = editingTask.subtasks.map(s=>s.id===sub.id?{...s, title:e.target.value}:s);
-                                  setEditingTask({...editingTask, subtasks:updated});
-                               }}/>
-                               <button 
-                                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleConvertSubtaskToTask(sub.id); }}
-                                  className="p-1 bg-zinc-800 hover:bg-indigo-600 rounded text-zinc-400 hover:text-white transition-colors"
-                                  title="Convertir en Tarea Principal"
-                               >
-                                  <ArrowUpRight size={14}/>
-                               </button>
-                            </div>
-                         ))}
-                         <div className="flex gap-2 mt-2">
-                            <input className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-sm" placeholder="Nueva subtarea..." value={tempSubtask} onChange={e=>setTempSubtask(e.target.value)} onKeyDown={e=>{
-                               if(e.key==='Enter' && tempSubtask.trim()){
-                                  setEditingTask({...editingTask, subtasks:[...(editingTask.subtasks||[]), {id:Math.random().toString(), title:tempSubtask, completed:false, assignees:[]}]});
-                                  setTempSubtask('');
-                               }
-                            }}/>
-                            <button onClick={()=>{
-                               if(tempSubtask.trim()){
-                                  setEditingTask({...editingTask, subtasks:[...(editingTask.subtasks||[]), {id:Math.random().toString(), title:tempSubtask, completed:false, assignees:[]}]});
-                                  setTempSubtask('');
-                               }
-                            }} className="bg-zinc-800 px-3 rounded text-zinc-300">+</button>
-                         </div>
-                      </div>
-                   </div>
-                   <div>
-                      <label className="text-xs text-zinc-500 block mb-2">DETALLES</label>
-                      <textarea className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-sm text-zinc-300 mb-4" rows={5} placeholder="Notas..." value={editingTask.notes} onChange={e=>setEditingTask({...editingTask, notes:e.target.value})}/>
-                      <label className="text-xs text-zinc-500 block mb-1">Fecha Límite</label>
-                      <input type="date" className="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-sm text-zinc-300" value={editingTask.dueDate || ''} onChange={e=>setEditingTask({...editingTask, dueDate:e.target.value})}/>
-                   </div>
-                </div>
-
-                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-zinc-800">
-                   <button className="text-red-400 hover:text-red-300 text-sm px-3" onClick={handleDeleteTask}>Eliminar Tarea</button>
-                   <button onClick={handleSaveChanges} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded flex items-center gap-2"><Save size={16}/> Guardar Cambios</button>
-                </div>
-             </Card>
-          </div>
-       )}
-
-       {/* SIMPLE MODALS (Projects, Clients, Team) */}
-       {isProjectModalOpen && (
-         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-            <Card className="w-full max-w-md">
-               <h3 className="mb-4 font-bold">Nuevo Proyecto</h3>
-               <Input placeholder="Nombre" value={newProject.name} onChange={e=>setNewProject({...newProject, name:e.target.value})}/>
-               <div className="flex justify-end gap-2">
-                  <button onClick={()=>setProjectModalOpen(false)} className="text-zinc-400">Cancelar</button>
-                  <button onClick={async ()=>{
-                     await supabase.from('projects').insert([{...newProject, status:'activo', createdAt: new Date().toISOString()}]); 
-                     fetchData(); 
-                     setProjectModalOpen(false);
-                  }} className="bg-indigo-600 text-white px-3 py-1 rounded">Crear</button>
-               </div>
-            </Card>
-         </div>
-       )}
-       {isClientModalOpen && (
-         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-            <Card className="w-full max-w-md">
-               <h3 className="mb-4 font-bold">Nuevo Cliente</h3>
-               <Input placeholder="Nombre" value={newClient.name} onChange={e=>setNewClient({...newClient, name:e.target.value})}/>
-               <div className="flex justify-end gap-2">
-                  <button onClick={()=>setClientModalOpen(false)} className="text-zinc-400">Cancelar</button>
-                  <button onClick={async ()=>{
-                     await supabase.from('clients').insert([{...newClient, status:'activo', createdAt: new Date().toISOString()}]); 
-                     fetchData(); 
-                     setClientModalOpen(false);
-                  }} className="bg-indigo-600 text-white px-3 py-1 rounded">Crear</button>
-               </div>
-            </Card>
-         </div>
-       )}
-       {isUserModalOpen && (
-         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-            <Card className="w-full max-w-md">
-               <h3 className="mb-4 font-bold">Nuevo Miembro</h3>
-               <Input placeholder="Nombre" value={newUser.name} onChange={e=>setNewUser({...newUser, name:e.target.value})}/>
-               <div className="flex justify-end gap-2">
-                  <button onClick={()=>setUserModalOpen(false)} className="text-zinc-400">Cancelar</button>
-                  <button onClick={async ()=>{
-                     await supabase.from('team').insert([{...newUser, createdAt: new Date().toISOString()}]); 
-                     fetchData(); 
-                     setUserModalOpen(false);
-                  }} className="bg-indigo-600 text-white px-3 py-1 rounded">Crear</button>
-               </div>
-            </Card>
-         </div>
-       )}
-
-    </div>
-  );
-}
+             {currentView === 'dashboard
